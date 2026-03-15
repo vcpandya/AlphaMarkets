@@ -69,6 +69,10 @@ export interface ChatCompletionOptions {
   jsonSchema?: { name: string; schema: Record<string, unknown> };
 }
 
+const SITE_URL = process.env.REPLIT_DEV_DOMAIN
+  ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+  : "https://alphamarkets.replit.app";
+
 export async function chatCompletion(
   apiKey: string,
   model: string,
@@ -100,7 +104,7 @@ export async function chatCompletion(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:5173",
+        "HTTP-Referer": SITE_URL,
         "X-Title": "AlphaMarkets",
       },
       body: JSON.stringify(body),
@@ -179,7 +183,7 @@ export async function agenticCompletion(
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "http://localhost:5173",
+          "HTTP-Referer": SITE_URL,
           "X-Title": "AlphaMarkets",
         },
         body: JSON.stringify(body),
