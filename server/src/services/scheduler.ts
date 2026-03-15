@@ -18,7 +18,6 @@ function getServerKeys() {
     openRouter: process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || "",
     jina: process.env.JINA_API_KEY || process.env.JINA_KEY || "",
     alphaVantage: process.env.ALPHA_VANTAGE_API_KEY || process.env.ALPHAVANTAGE_API_KEY || "",
-    agentMail: process.env.AGENTMAIL_API_KEY || process.env.AGENTMAIL_KEY || "",
     model: process.env.DEFAULT_MODEL || "anthropic/claude-sonnet-4",
   };
 }
@@ -153,11 +152,10 @@ async function executeSchedule(schedule: ScheduleConfig): Promise<void> {
       },
     });
 
-    // Step 4: Send email
-    if (schedule.emailTo && keys.agentMail) {
+    // Step 4: Send email via AgentMail connector (omni@agentmail.to)
+    if (schedule.emailTo) {
       const { subject, html } = formatAnalysisEmail(schedule, results);
       const emailResult = await sendEmail({
-        apiKey: keys.agentMail,
         to: schedule.emailTo,
         subject,
         htmlBody: html,

@@ -1,31 +1,57 @@
 /**
- * AgentMail service for sending scheduled analysis results via email.
+ * AgentMail service for sending and receiving emails.
  *
- * Uses the AgentMail API (https://agentmail.to) to send HTML-formatted
- * analysis reports to configured recipients.
+ * Uses the Replit AgentMail connector (via @replit/connectors-sdk) for auth,
+ * which handles identity and token refresh automatically.
+ * Falls back to direct API key auth if the connector is unavailable.
+ *
+ * Fixed sender mailbox: omni@agentmail.to
  */
 
+import { ReplitConnectors } from "@replit/connectors-sdk";
+
+const FROM_ADDRESS = "omni@agentmail.to";
 const AGENTMAIL_API = "https://api.agentmail.to/v0";
 
-interface SendEmailParams {
-  apiKey: string;
+async function agentMailFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  // Try Replit connector first (handles auth automatically)
+  try {
+    const connectors = new ReplitConnectors();
+    return await connectors.proxy("agentmail", path, {
+      method: (options.method as string) || "GET",
+      ...(options.body ? { body: options.body as string } : {}),
+      ...(options.headers ? { headers: options.headers as Record<string, string> } : {}),
+    }) as unknown as Response;
+  } catch {
+    // Fall back to direct API key auth
+    const apiKey = process.env.AGENTMAIL_API_KEY || process.env.AGENTMAIL_KEY;
+    if (!apiKey) throw new Error("AgentMail: no connector and no AGENTMAIL_API_KEY set");
+    return fetch(`${AGENTMAIL_API}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        ...(options.headers as Record<string, string> || {}),
+      },
+    });
+  }
+}
+
+export interface SendEmailParams {
   to: string;
   subject: string;
   htmlBody: string;
   from?: string;
+  apiKey?: string; // optional, only used when connector is unavailable
 }
 
 export async function sendEmail(params: SendEmailParams): Promise<{ success: boolean; error?: string }> {
   try {
-    // First, get or create a mailbox to send from
-    const fromAddress = params.from || await getOrCreateMailbox(params.apiKey);
+    const fromAddress = params.from || FROM_ADDRESS;
 
-    const res = await fetch(`${AGENTMAIL_API}/messages/send`, {
+    const res = await agentMailFetch("/messages/send", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${params.apiKey}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         from: fromAddress,
         to: [params.to],
@@ -48,49 +74,70 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
   }
 }
 
-let cachedMailbox: string | null = null;
-let cachedMailboxKey: string | null = null;
-let cacheTime = 0;
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+export interface InboxMessage {
+  id: string;
+  from: string;
+  to: string[];
+  subject: string;
+  text?: string;
+  html?: string;
+  receivedAt: string;
+}
 
-async function getOrCreateMailbox(apiKey: string): Promise<string> {
-  if (cachedMailbox && cachedMailboxKey === apiKey && Date.now() - cacheTime < CACHE_TTL) return cachedMailbox;
-  // Invalidate on key change
-  cachedMailbox = null;
-  cachedMailboxKey = apiKey;
-
-  // List existing mailboxes
-  const listRes = await fetch(`${AGENTMAIL_API}/mailboxes`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
-
-  if (listRes.ok) {
-    const data = await listRes.json() as { mailboxes?: { address: string }[] };
-    if (data.mailboxes && data.mailboxes.length > 0) {
-      cachedMailbox = data.mailboxes[0].address;
-      cacheTime = Date.now();
-      return cachedMailbox;
+export async function listInbox(limit = 20): Promise<{ messages: InboxMessage[]; error?: string }> {
+  try {
+    const res = await agentMailFetch(`/mailboxes/${encodeURIComponent(FROM_ADDRESS)}/messages?limit=${limit}`);
+    if (!res.ok) {
+      const body = await res.text();
+      return { messages: [], error: `AgentMail API error (${res.status}): ${body}` };
     }
+    const data = await res.json() as { messages?: InboxMessage[] };
+    return { messages: data.messages || [] };
+  } catch (err) {
+    return {
+      messages: [],
+      error: err instanceof Error ? err.message : "Unknown error listing inbox",
+    };
   }
+}
 
-  // Create a new mailbox
-  const createRes = await fetch(`${AGENTMAIL_API}/mailboxes`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({}),
-  });
-
-  if (!createRes.ok) {
-    throw new Error(`Failed to create AgentMail mailbox: ${createRes.status}`);
+export async function getMessage(messageId: string): Promise<{ message: InboxMessage | null; error?: string }> {
+  try {
+    const res = await agentMailFetch(`/mailboxes/${encodeURIComponent(FROM_ADDRESS)}/messages/${messageId}`);
+    if (!res.ok) {
+      const body = await res.text();
+      return { message: null, error: `AgentMail API error (${res.status}): ${body}` };
+    }
+    const message = await res.json() as InboxMessage;
+    return { message };
+  } catch (err) {
+    return {
+      message: null,
+      error: err instanceof Error ? err.message : "Unknown error fetching message",
+    };
   }
+}
 
-  const createData = await createRes.json() as { address: string };
-  cachedMailbox = createData.address;
-  cacheTime = Date.now();
-  return cachedMailbox;
+export async function replyToMessage(messageId: string, htmlBody: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await agentMailFetch(`/mailboxes/${encodeURIComponent(FROM_ADDRESS)}/messages/${messageId}/reply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html: htmlBody }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      return { success: false, error: `AgentMail API error (${res.status}): ${body}` };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error replying to message",
+    };
+  }
 }
 
 export function formatAnalysisEmail(schedule: {
@@ -176,7 +223,7 @@ export function formatAnalysisEmail(schedule: {
 
       <div style="padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
         <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-          Generated by AlphaMarkets | Powered by AI
+          Generated by AlphaMarkets | Powered by AI | Sent from ${FROM_ADDRESS}
         </p>
       </div>
     </body>

@@ -22,7 +22,7 @@ This is a monorepo with two workspaces:
 - JWT auth with bcryptjs (cookie-based)
 - Background scheduler for periodic news fetching
 - Routes: `/api/auth`, `/api/news`, `/api/analysis`, `/api/models`, `/api/env-keys`, `/api/content`, `/api/storage`
-- External integrations: OpenRouter (LLMs), Jina (web scraping), AlphaVantage (stock data), AgentMail
+- External integrations: OpenRouter (LLMs), Jina (web scraping), AlphaVantage (stock data), AgentMail (via Replit connector, fixed mailbox omni@agentmail.to)
 
 ## Dev Workflows
 

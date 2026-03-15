@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import * as db from "../services/pgStorage.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || (
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || (
   process.env.NODE_ENV === "production"
     ? (() => { throw new Error("JWT_SECRET environment variable is required in production"); })()
     : "alphamarkets-dev-only-secret"
