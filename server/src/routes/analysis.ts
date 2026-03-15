@@ -155,13 +155,12 @@ router.post(
   validateOpenRouterKey,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { model, articles, topic, location, reportType, market, stockCount } =
+      const { model: requestedModel, articles, topic, location, reportType, market, stockCount } =
         req.body as AnalysisRequest;
 
-      if (!model) {
-        res.status(400).json({ error: "Missing required field: model" });
-        return;
-      }
+      // User/frontend selection takes precedence; fall back to server DEFAULT_MODEL env var
+      const model = requestedModel || process.env.DEFAULT_MODEL || "anthropic/claude-sonnet-4";
+
       if (!articles || articles.length === 0) {
         res.status(400).json({ error: "No articles provided for analysis" });
         return;
@@ -402,10 +401,13 @@ router.post(
   validateOpenRouterKey,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { model, stock, analysisType } = req.body;
+      const { model: requestedModel, stock, analysisType } = req.body;
 
-      if (!model || !stock || !analysisType) {
-        res.status(400).json({ error: "Missing required fields: model, stock, analysisType" });
+      // User/frontend selection takes precedence; fall back to server DEFAULT_MODEL env var
+      const model = requestedModel || process.env.DEFAULT_MODEL || "anthropic/claude-sonnet-4";
+
+      if (!stock || !analysisType) {
+        res.status(400).json({ error: "Missing required fields: stock, analysisType" });
         return;
       }
 
@@ -592,10 +594,13 @@ router.post(
   validateOpenRouterKey,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { model, messages } = req.body;
+      const { model: requestedModel, messages } = req.body;
 
-      if (!model || !messages) {
-        res.status(400).json({ error: "Missing required fields: model, messages" });
+      // User/frontend selection takes precedence; fall back to server DEFAULT_MODEL env var
+      const model = requestedModel || process.env.DEFAULT_MODEL || "anthropic/claude-sonnet-4";
+
+      if (!messages) {
+        res.status(400).json({ error: "Missing required field: messages" });
         return;
       }
 
