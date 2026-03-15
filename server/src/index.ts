@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import cookieParser from "cookie-parser";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import newsRouter from "./routes/news.js";
 import analysisRouter from "./routes/analysis.js";
 import modelsRouter from "./routes/models.js";
@@ -59,13 +60,22 @@ app.use("/api/env-keys", requireAuth, envkeysRouter);
 app.use("/api/content", requireAuth, contentRouter);
 app.use("/api/storage", requireAuth, storageRouter);
 
-// Serve frontend in production
+// Serve frontend
 if (process.env.NODE_ENV === "production") {
   const clientDist = path.join(__dirname, "..", "..", "client", "dist");
   app.use(express.static(clientDist));
   app.get("*", (_req, res) => {
     res.sendFile(path.join(clientDist, "index.html"));
   });
+} else {
+  // In dev, proxy all non-API requests to the Vite dev server
+  app.use(
+    createProxyMiddleware({
+      target: "http://localhost:5000",
+      changeOrigin: true,
+      ws: true,
+    }),
+  );
 }
 
 // Error handler (must be last)
