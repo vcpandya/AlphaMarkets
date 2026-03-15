@@ -8,7 +8,7 @@ import { AnalysisForm } from "./AnalysisForm";
 import { ProgressOverlay } from "./ProgressOverlay";
 import { ReportTabs } from "./ReportTabs";
 import { Button } from "../ui/Button";
-import type { MarketRegion, ManualSources, AnalysisResults, SavedRun } from "../../types";
+import type { MarketRegion, ManualSources, AnalysisResults, SavedRun, AnalysisModules } from "../../types";
 import { useChatContext } from "../../contexts/ChatContext";
 
 export function Dashboard() {
@@ -65,6 +65,7 @@ export function Dashboard() {
     markets: MarketRegion[];
     stockCount?: number;
     manualSources?: ManualSources;
+    modules: AnalysisModules;
   }) {
     setLoadedRun(null);
     setHasRun(true);

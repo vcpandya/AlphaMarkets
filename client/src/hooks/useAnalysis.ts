@@ -12,16 +12,23 @@ import type {
   NewsArticle,
   MarketRegion,
   ManualSources,
+  AnalysisModules,
 } from "../types";
 import * as api from "../services/api";
 import { useNewsHistory } from "./useNewsHistory";
 
-const INITIAL_STEPS: ProgressStep[] = [
-  { id: "news", label: "Searching news articles...", status: "pending" },
-  { id: "qa", label: "Generating Q&A report...", status: "pending" },
-  { id: "stocks", label: "Generating stock recommendations...", status: "pending" },
-  { id: "graphs", label: "Building impact graph & cause chain...", status: "pending" },
-];
+function buildSteps(modules: AnalysisModules): ProgressStep[] {
+  const steps: ProgressStep[] = [
+    { id: "news", label: "Searching news articles...", status: "pending" },
+  ];
+  if (modules.qa) steps.push({ id: "qa", label: "Generating Q&A report...", status: "pending" });
+  if (modules.stocks) steps.push({ id: "stocks", label: "Generating stock recommendations...", status: "pending" });
+  if (modules.graph || modules.causechain) {
+    const parts = [modules.graph && "impact graph", modules.causechain && "cause chain"].filter(Boolean);
+    steps.push({ id: "graphs", label: `Building ${parts.join(" & ")}...`, status: "pending" });
+  }
+  return steps;
+}
 
 function makeProgress(
   steps: ProgressStep[],
@@ -45,7 +52,7 @@ export function useAnalysis(
     causechain: null,
   });
   const [progress, setProgress] = useState<AnalysisProgress>(
-    makeProgress(INITIAL_STEPS, 0, false),
+    makeProgress([], 0, false),
   );
   const [error, setError] = useState<string | null>(null);
   const { getPreviousUrls, addUrls } = useNewsHistory();
@@ -67,23 +74,27 @@ export function useAnalysis(
       markets?: MarketRegion[];
       stockCount?: number;
       manualSources?: ManualSources;
+      modules?: AnalysisModules;
     }) => {
+      const modules = params.modules ?? { qa: true, stocks: true, graph: true, causechain: true };
       setError(null);
       setResults({ qa: null, stocks: null, graph: null, causechain: null });
 
-      let steps = INITIAL_STEPS.map((s) => ({ ...s }));
+      let steps = buildSteps(modules);
+      let stepIdx = 0;
       setProgress(makeProgress(steps, 0, true));
 
+      const findStep = (id: string) => steps.findIndex((s) => s.id === id);
+
       try {
-        // Step 1: Search news + process manual sources
-        steps = updateStep(steps, 0, "running");
-        setProgress(makeProgress(steps, 0, true));
+        // Step: Search news + process manual sources
+        steps = updateStep(steps, findStep("news"), "running");
+        setProgress(makeProgress(steps, stepIdx, true));
 
         // Process manual sources into NewsArticle objects
         const manualArticles: NewsArticle[] = [];
         const ms = params.manualSources;
         if (ms) {
-          // Extract URLs in parallel
           if (ms.urls.length > 0) {
             const urlResults = await Promise.allSettled(
               ms.urls.map((url) => api.extractUrl(jinaKey, url)),
@@ -101,7 +112,6 @@ export function useAnalysis(
               }
             }
           }
-          // Files
           for (const file of ms.files) {
             manualArticles.push({
               url: `manual://${file.name}`,
@@ -112,7 +122,6 @@ export function useAnalysis(
               source: "Manual Upload",
             });
           }
-          // Raw text
           if (ms.text.trim()) {
             manualArticles.push({
               url: "manual://pasted-text",
@@ -131,7 +140,6 @@ export function useAnalysis(
         let allArticles: NewsArticle[];
 
         if (onlyManual) {
-          // Skip news search, use only manual articles
           allArticles = manualArticles;
         } else {
           const historyKey = params.topic || "__general__";
@@ -152,7 +160,6 @@ export function useAnalysis(
 
           allArticles = newsResult.articles;
 
-          // If server didn't merge manual articles, merge client-side
           if (manualArticles.length > 0) {
             const existingUrls = new Set(allArticles.map((a) => a.url));
             for (const ma of manualArticles) {
@@ -174,8 +181,9 @@ export function useAnalysis(
           );
         }
 
-        steps = updateStep(steps, 0, "done");
-        setProgress(makeProgress(steps, 1, true));
+        steps = updateStep(steps, findStep("news"), "done");
+        stepIdx++;
+        setProgress(makeProgress(steps, stepIdx, true));
 
         const market = params.markets?.join(",") || "Global";
         const commonParams = {
@@ -187,64 +195,65 @@ export function useAnalysis(
           stockCount: params.stockCount,
         };
 
-        // Step 2: Generate QA report
-        steps = updateStep(steps, 1, "running");
-        setProgress(makeProgress(steps, 1, true));
+        // Phase 2: QA + Stocks in parallel (only selected modules)
+        const phase2Promises: Promise<void>[] = [];
 
-        const qaPromise = api
-          .generateReport<QAItem[]>(openRouterKey, {
-            ...commonParams,
-            reportType: "qa",
-          })
-          .then((data) => {
-            setResults((prev) => ({ ...prev, qa: data }));
-          });
+        if (modules.qa) {
+          const qaIdx = findStep("qa");
+          steps = updateStep(steps, qaIdx, "running");
+          setProgress(makeProgress(steps, stepIdx, true));
+          phase2Promises.push(
+            api.generateReport<QAItem[]>(openRouterKey, { ...commonParams, reportType: "qa" })
+              .then((data) => { setResults((prev) => ({ ...prev, qa: data })); }),
+          );
+        }
 
-        // Step 3: Generate stocks report (parallel with QA)
-        steps = updateStep(steps, 2, "running");
-        setProgress(makeProgress(steps, 2, true));
+        if (modules.stocks) {
+          const stocksIdx = findStep("stocks");
+          steps = updateStep(steps, stocksIdx, "running");
+          setProgress(makeProgress(steps, stepIdx, true));
+          phase2Promises.push(
+            api.generateReport<StockRecommendation[]>(openRouterKey, { ...commonParams, reportType: "stocks" })
+              .then((data) => { setResults((prev) => ({ ...prev, stocks: data })); }),
+          );
+        }
 
-        const stocksPromise = api
-          .generateReport<StockRecommendation[]>(openRouterKey, {
-            ...commonParams,
-            reportType: "stocks",
-          })
-          .then((data) => {
-            setResults((prev) => ({ ...prev, stocks: data }));
-          });
+        if (phase2Promises.length > 0) {
+          await Promise.all(phase2Promises);
+          if (modules.qa) steps = updateStep(steps, findStep("qa"), "done");
+          if (modules.stocks) steps = updateStep(steps, findStep("stocks"), "done");
+          stepIdx++;
+          setProgress(makeProgress(steps, stepIdx, true));
+        }
 
-        await Promise.all([qaPromise, stocksPromise]);
+        // Phase 3: Graph + Cause Chain in parallel (only selected modules)
+        const phase3Promises: Promise<void>[] = [];
 
-        steps = updateStep(steps, 1, "done");
-        steps = updateStep(steps, 2, "done");
-        setProgress(makeProgress(steps, 3, true));
+        if (modules.graph) {
+          phase3Promises.push(
+            api.generateReport<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
+              openRouterKey, { ...commonParams, reportType: "graph" },
+            ).then((data) => { setResults((prev) => ({ ...prev, graph: data })); }),
+          );
+        }
 
-        // Step 4: Generate graph + causechain in parallel
-        steps = updateStep(steps, 3, "running");
-        setProgress(makeProgress(steps, 3, true));
+        if (modules.causechain) {
+          phase3Promises.push(
+            api.generateReport<CauseChainAnalysis>(openRouterKey, { ...commonParams, reportType: "causechain" })
+              .then((data) => { setResults((prev) => ({ ...prev, causechain: data })); }),
+          );
+        }
 
-        const graphPromise = api
-          .generateReport<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
-            openRouterKey,
-            { ...commonParams, reportType: "graph" },
-          )
-          .then((data) => {
-            setResults((prev) => ({ ...prev, graph: data }));
-          });
+        if (phase3Promises.length > 0) {
+          const graphsIdx = findStep("graphs");
+          steps = updateStep(steps, graphsIdx, "running");
+          setProgress(makeProgress(steps, stepIdx, true));
+          await Promise.all(phase3Promises);
+          steps = updateStep(steps, graphsIdx, "done");
+          stepIdx++;
+        }
 
-        const causechainPromise = api
-          .generateReport<CauseChainAnalysis>(openRouterKey, {
-            ...commonParams,
-            reportType: "causechain",
-          })
-          .then((data) => {
-            setResults((prev) => ({ ...prev, causechain: data }));
-          });
-
-        await Promise.all([graphPromise, causechainPromise]);
-
-        steps = updateStep(steps, 3, "done");
-        setProgress(makeProgress(steps, 4, false));
+        setProgress(makeProgress(steps, steps.length, false));
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "An unknown error occurred";

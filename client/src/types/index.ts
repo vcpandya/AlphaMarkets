@@ -148,6 +148,49 @@ export interface ManualSources {
   text: string;
 }
 
+export interface AnalysisModules {
+  qa: boolean;
+  stocks: boolean;
+  graph: boolean;
+  causechain: boolean;
+}
+
+export type StorageBackend = "indexeddb" | "sqlite";
+
+export type ScheduleFrequency = "daily" | "weekly" | "monthly";
+
+export interface ScheduleConfig {
+  id: string;
+  name: string;
+  tags: string[];
+  markets: MarketRegion[];
+  location: string;
+  modules: AnalysisModules;
+  stockCount?: number;
+  frequency: ScheduleFrequency;
+  time: string; // HH:mm
+  dayOfWeek?: number; // 0-6 for weekly
+  dayOfMonth?: number; // 1-28 for monthly
+  emailTo: string;
+  enabled: boolean;
+  lastRun?: string; // ISO
+  nextRun?: string; // ISO
+  createdAt: string;
+}
+
+export interface AppUser {
+  id: string;
+  username: string;
+  displayName: string;
+  role: "admin" | "user";
+}
+
+export interface ManagedUser extends AppUser {
+  invitedBy: string | null;
+  createdAt: string;
+  lastLogin: string | null;
+}
+
 export interface EnvKeyStatus {
   found: boolean;
   preview: string | null;
@@ -157,4 +200,5 @@ export interface EnvKeysResponse {
   openRouter: EnvKeyStatus;
   jina: EnvKeyStatus;
   alphaVantage: EnvKeyStatus;
+  agentMail: EnvKeyStatus;
 }

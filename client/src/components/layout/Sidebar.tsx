@@ -1,14 +1,15 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Settings, TrendingUp, X, Trash2, Clock } from "lucide-react";
+import { LayoutDashboard, Settings, TrendingUp, X, Trash2, Clock, Shield, LogOut } from "lucide-react";
 import { useSettings } from "../../hooks/useSettings";
 import { useSavedRuns } from "../../hooks/useSavedRuns";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
 }
 
-const navItems = [
+const BASE_NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
@@ -26,7 +27,12 @@ function formatDate(iso: string): string {
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { jinaKey, openRouterKey, alphaVantageKey } = useSettings();
   const { runs, deleteRun } = useSavedRuns();
+  const { user, authRequired, logout } = useAuth();
   const navigate = useNavigate();
+
+  const navItems = user?.role === "admin"
+    ? [...BASE_NAV, { to: "/admin", label: "Admin", icon: Shield }]
+    : BASE_NAV;
 
   const jinaOk = Boolean(jinaKey);
   const orOk = Boolean(openRouterKey);
@@ -147,7 +153,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                       </button>
                     </div>
                     <div className="flex items-center gap-1 mt-1 flex-wrap">
-                      {run.tags.slice(0, 3).map((tag, i) => (
+                      {(run.tags || []).slice(0, 3).map((tag, i) => (
                         <span
                           key={i}
                           className="inline-block rounded-full bg-accent/10 px-1.5 py-0 text-[9px] text-accent/80 border border-accent/20"
@@ -155,14 +161,14 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                           {tag}
                         </span>
                       ))}
-                      {run.tags.length > 3 && (
+                      {(run.tags || []).length > 3 && (
                         <span className="text-[9px] text-text-muted">
                           +{run.tags.length - 3}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 mt-0.5">
-                      {run.markets.map((m) => (
+                      {(run.markets || []).map((m) => (
                         <span
                           key={m}
                           className="text-[9px] text-text-muted"
@@ -190,8 +196,40 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
         )}
 
+        {/* User info + Logout */}
+        {authRequired && user && (
+          <div className="px-4 py-3 border-t border-border mt-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 ${
+                  user.role === "admin" ? "bg-accent/10" : "bg-surface"
+                }`}>
+                  {user.role === "admin" ? (
+                    <Shield className="w-3.5 h-3.5 text-accent" />
+                  ) : (
+                    <span className="text-xs font-medium text-text-muted">
+                      {(user.displayName || user.username)[0].toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-text-primary truncate">{user.displayName || user.username}</p>
+                  <p className="text-[10px] text-text-muted">{user.role}</p>
+                </div>
+              </div>
+              <button
+                onClick={async () => { await logout(); }}
+                className="p-1.5 rounded-lg text-text-muted hover:text-bearish hover:bg-bearish/10 transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* API key status */}
-        <div className="px-4 py-4 border-t border-border mt-auto">
+        <div className={`px-4 py-4 border-t border-border ${!authRequired || !user ? "mt-auto" : ""}`}>
           <p className="text-[10px] text-text-muted uppercase tracking-widest mb-3">
             API Status
           </p>

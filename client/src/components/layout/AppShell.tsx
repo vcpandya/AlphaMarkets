@@ -9,6 +9,7 @@ import { useSettings } from "../../hooks/useSettings";
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
   "/settings": "Settings",
+  "/admin": "Admin",
 };
 
 export function AppShell({ children }: { children: ReactNode }) {

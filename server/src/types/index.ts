@@ -110,6 +110,34 @@ export interface NewsSearchRequest {
   manualArticles?: NewsArticle[];
 }
 
+export type ScheduleFrequency = "daily" | "weekly" | "monthly";
+
+export interface AnalysisModules {
+  qa: boolean;
+  stocks: boolean;
+  graph: boolean;
+  causechain: boolean;
+}
+
+export interface ScheduleConfig {
+  id: string;
+  name: string;
+  tags: string[];
+  markets: MarketRegion[];
+  location: string;
+  modules: AnalysisModules;
+  stockCount?: number;
+  frequency: ScheduleFrequency;
+  time: string;
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  emailTo: string;
+  enabled: boolean;
+  lastRun?: string;
+  nextRun?: string;
+  createdAt: string;
+}
+
 export interface PromptPair {
   system: string;
   user: string;

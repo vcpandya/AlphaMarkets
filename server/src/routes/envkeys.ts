@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { requireAdmin } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -24,6 +25,10 @@ const KEY_CONFIGS: KeyConfig[] = [
       "ALPHAVANTAGE_API_KEY",
     ],
   },
+  {
+    name: "agentMail",
+    envVars: ["AGENTMAIL_API_KEY", "AGENTMAIL_KEY"],
+  },
 ];
 
 function findEnvValue(envVars: string[]): string | undefined {
@@ -41,8 +46,8 @@ function maskKey(key: string): string {
   return key.substring(0, 4) + "..." + key.substring(key.length - 4);
 }
 
-// GET /api/env-keys - check which keys are available
-router.get("/", (_req: Request, res: Response) => {
+// GET /api/env-keys - check which keys are available (admin only)
+router.get("/", requireAdmin, (_req: Request, res: Response) => {
   const result: Record<
     string,
     { found: boolean; preview: string | null }
@@ -59,8 +64,8 @@ router.get("/", (_req: Request, res: Response) => {
   res.json(result);
 });
 
-// POST /api/env-keys/resolve - get actual key value on demand
-router.post("/resolve", (req: Request, res: Response) => {
+// POST /api/env-keys/resolve - get actual key value (admin only)
+router.post("/resolve", requireAdmin, (req: Request, res: Response) => {
   const { key } = req.body as { key: string };
 
   if (!key) {

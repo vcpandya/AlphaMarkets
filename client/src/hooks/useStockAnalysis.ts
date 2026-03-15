@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { StockRecommendation } from "../types";
-import { getStockAnalysis, putStockAnalysis } from "../lib/db";
+import { getStockAnalysis, putStockAnalysis } from "../lib/storage";
 
 export interface FundamentalAnalysis {
   overview: string;
@@ -129,6 +129,7 @@ export function useStockAnalysis(
 
         const res = await fetch("/api/analysis/generate-stock-detail", {
           method: "POST",
+          credentials: "include",
           headers,
           body: JSON.stringify({
             model: selectedModel,

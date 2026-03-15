@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import * as db from "../lib/db";
+import * as db from "../lib/storage";
 
 function hashTopic(topic: string): string {
   let h = 0;

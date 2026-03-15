@@ -9,6 +9,14 @@ import type {
 
 const API_BASE = "/api";
 
+/**
+ * Wrapper around fetch that always includes credentials (cookies)
+ * for auth in server mode.
+ */
+function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, { credentials: "include", ...init });
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.text();
@@ -27,7 +35,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
 export async function fetchModels(
   openRouterKey: string,
 ): Promise<OpenRouterModel[]> {
-  const res = await fetch(`${API_BASE}/models`, {
+  const res = await apiFetch(`${API_BASE}/models`, {
     headers: { "x-openrouter-key": openRouterKey },
   });
   const data = await handleResponse<{ models: OpenRouterModel[] }>(res);
@@ -35,14 +43,14 @@ export async function fetchModels(
 }
 
 export async function checkEnvKeys(): Promise<EnvKeysResponse> {
-  const res = await fetch(`${API_BASE}/env-keys`);
+  const res = await apiFetch(`${API_BASE}/env-keys`);
   return handleResponse<EnvKeysResponse>(res);
 }
 
 export async function resolveEnvKey(
-  key: "openRouter" | "jina" | "alphaVantage",
+  key: "openRouter" | "jina" | "alphaVantage" | "agentMail",
 ): Promise<string> {
-  const res = await fetch(`${API_BASE}/env-keys/resolve`, {
+  const res = await apiFetch(`${API_BASE}/env-keys/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key }),
@@ -55,7 +63,7 @@ export async function extractUrl(
   jinaKey: string,
   url: string,
 ): Promise<{ title: string; content: string; url: string }> {
-  const res = await fetch(`${API_BASE}/content/extract-url`, {
+  const res = await apiFetch(`${API_BASE}/content/extract-url`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -86,7 +94,7 @@ export async function searchNews(
   if (alphaVantageKey) {
     headers["x-alphavantage-key"] = alphaVantageKey;
   }
-  const res = await fetch(`${API_BASE}/news/search`, {
+  const res = await apiFetch(`${API_BASE}/news/search`, {
     method: "POST",
     headers,
     body: JSON.stringify(params),
@@ -99,7 +107,7 @@ export async function chat(
   model: string,
   messages: { role: string; content: string }[],
 ): Promise<string> {
-  const res = await fetch(`${API_BASE}/analysis/chat`, {
+  const res = await apiFetch(`${API_BASE}/analysis/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -123,7 +131,7 @@ export async function generateReport<T>(
     stockCount?: number;
   },
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}/analysis/generate`, {
+  const res = await apiFetch(`${API_BASE}/analysis/generate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { SavedRun } from "../types";
-import * as db from "../lib/db";
+import * as db from "../lib/storage";
 
 function generateId(): string {
   return `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;

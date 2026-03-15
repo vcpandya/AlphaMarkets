@@ -5,7 +5,7 @@ import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import TagInput from "../ui/TagInput";
-import type { NewsSource, MarketRegion, ManualSources } from "../../types";
+import type { NewsSource, MarketRegion, ManualSources, AnalysisModules } from "../../types";
 
 const DEFAULT_TAGS: string[] = [
   "global markets",
@@ -22,6 +22,15 @@ const DEFAULT_TAGS: string[] = [
 
 const MARKET_OPTIONS: MarketRegion[] = ["US", "India", "Europe", "Asia", "Global"];
 
+const ALL_MODULES: AnalysisModules = { qa: true, stocks: true, graph: true, causechain: true };
+
+const MODULE_LABELS: { key: keyof AnalysisModules; label: string }[] = [
+  { key: "qa", label: "Expert Q&A" },
+  { key: "stocks", label: "Stock Picks" },
+  { key: "graph", label: "Impact Graph" },
+  { key: "causechain", label: "Cause Chain" },
+];
+
 interface AnalysisFormProps {
   onAnalyze: (params: {
     topic: string;
@@ -33,6 +42,7 @@ interface AnalysisFormProps {
     markets: MarketRegion[];
     stockCount?: number;
     manualSources?: ManualSources;
+    modules: AnalysisModules;
   }) => void;
   isRunning: boolean;
   hasKeys: boolean;
@@ -61,6 +71,7 @@ export function AnalysisForm({
 }: AnalysisFormProps) {
   const [tags, setTags] = useState<string[]>([...DEFAULT_TAGS]);
   const [markets, setMarkets] = useState<MarketRegion[]>(["Global"]);
+  const [modules, setModules] = useState<AnalysisModules>({ ...ALL_MODULES });
   const [stockCount, setStockCount] = useState<number | undefined>(undefined);
   const [location, setLocation] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -76,6 +87,17 @@ export function AnalysisForm({
   const [manualFiles, setManualFiles] = useState<File[]>([]);
   const [manualText, setManualText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const allSelected = Object.values(modules).every(Boolean);
+  const noneSelected = Object.values(modules).every((v) => !v);
+
+  function toggleModule(key: keyof AnalysisModules) {
+    setModules((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function toggleAll() {
+    setModules(allSelected ? { qa: false, stocks: false, graph: false, causechain: false } : { ...ALL_MODULES });
+  }
 
   const showTickers = newsSource === "alphavantage" || newsSource === "both";
 
@@ -174,6 +196,7 @@ export function AnalysisForm({
       ...(showTickers && tickers.trim() ? { tickers: tickers.trim() } : {}),
       tags,
       markets,
+      modules: noneSelected ? { ...ALL_MODULES } : modules,
       ...(stockCount !== undefined ? { stockCount } : {}),
       ...(manualSources ? { manualSources } : {}),
     });
@@ -512,31 +535,68 @@ export function AnalysisForm({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 pt-1">
-          {hasKeys && selectedModel ? (
-            <Button
-              type="submit"
-              size="lg"
-              disabled={isRunning}
-              icon={<Play className="w-4 h-4" />}
-              className="min-w-[160px]"
-            >
-              {isRunning ? "Analyzing..." : "Analyze"}
-            </Button>
-          ) : (
-            <div className="flex items-center gap-3 text-sm text-text-muted">
-              <AlertCircle className="w-4 h-4 text-bearish shrink-0" />
-              <span>
-                {!hasKeys
-                  ? "API keys required. "
-                  : "Select a model in "}
-                <Link to="/settings" className="text-accent hover:underline">
-                  Settings
-                </Link>
-                {!hasKeys ? " to get started." : " to continue."}
+        {/* Analysis Module Selection */}
+        <div className="flex items-center gap-4 pt-1 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* All toggle */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none group">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                className="w-3.5 h-3.5 rounded border-border text-accent focus:ring-accent/30 focus:ring-offset-0 cursor-pointer accent-[var(--color-accent,#6366f1)]"
+              />
+              <span className="text-xs font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+                All
               </span>
-            </div>
-          )}
+            </label>
+            <span className="w-px h-4 bg-border" />
+            {/* Individual modules */}
+            {MODULE_LABELS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-1.5 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={modules[key]}
+                  onChange={() => toggleModule(key)}
+                  className="w-3.5 h-3.5 rounded border-border text-accent focus:ring-accent/30 focus:ring-offset-0 cursor-pointer accent-[var(--color-accent,#6366f1)]"
+                />
+                <span className={`text-xs transition-colors ${
+                  modules[key]
+                    ? "text-text-secondary group-hover:text-text-primary font-medium"
+                    : "text-text-muted group-hover:text-text-secondary"
+                }`}>
+                  {label}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-4">
+            {hasKeys && selectedModel ? (
+              <Button
+                type="submit"
+                size="lg"
+                disabled={isRunning || noneSelected}
+                icon={<Play className="w-4 h-4" />}
+                className="min-w-[160px]"
+              >
+                {isRunning ? "Analyzing..." : noneSelected ? "Select modules" : "Analyze"}
+              </Button>
+            ) : (
+              <div className="flex items-center gap-3 text-sm text-text-muted">
+                <AlertCircle className="w-4 h-4 text-bearish shrink-0" />
+                <span>
+                  {!hasKeys
+                    ? "API keys required. "
+                    : "Select a model in "}
+                  <Link to="/settings" className="text-accent hover:underline">
+                    Settings
+                  </Link>
+                  {!hasKeys ? " to get started." : " to continue."}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </form>
     </Card>

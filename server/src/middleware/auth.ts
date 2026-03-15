@@ -1,0 +1,126 @@
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import * as sqlite from "../services/sqliteStorage.js";
+
+const JWT_SECRET = process.env.JWT_SECRET || (
+  process.env.NODE_ENV === "production"
+    ? (() => { throw new Error("JWT_SECRET environment variable is required in production"); })()
+    : "alphamarkets-dev-only-secret"
+);
+const TOKEN_EXPIRY = "7d";
+const COOKIE_NAME = "am_token";
+
+export interface AuthPayload {
+  userId: string;
+  username: string;
+  role: "admin" | "user";
+}
+
+// Extend Express Request
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthPayload;
+    }
+  }
+}
+
+export function signToken(payload: AuthPayload): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+}
+
+export function setAuthCookie(res: Response, token: string): void {
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: "/",
+  });
+}
+
+export function clearAuthCookie(res: Response): void {
+  res.clearCookie(COOKIE_NAME, { path: "/" });
+}
+
+/**
+ * Auth middleware: verifies JWT from cookie.
+ * If SQLite is not available (browser-only mode), skips auth.
+ */
+export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!sqlite.isAvailable()) {
+    if (process.env.NODE_ENV === "production") {
+      res.status(503).json({ error: "Database unavailable" });
+      return;
+    }
+    // Browser-only dev mode: skip auth
+    next();
+    return;
+  }
+
+  const token = req.cookies?.[COOKIE_NAME];
+  if (!token) {
+    res.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
+    return;
+  }
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    // Verify user still exists
+    const user = sqlite.getUserById(payload.userId);
+    if (!user) {
+      clearAuthCookie(res);
+      res.status(401).json({ error: "User no longer exists", code: "AUTH_REQUIRED" });
+      return;
+    }
+    req.user = { userId: user.id, username: user.username, role: user.role as "admin" | "user" };
+    next();
+  } catch {
+    clearAuthCookie(res);
+    res.status(401).json({ error: "Invalid or expired token", code: "AUTH_REQUIRED" });
+  }
+}
+
+/**
+ * Admin-only middleware. Must be used AFTER requireAuth.
+ */
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!sqlite.isAvailable()) {
+    if (process.env.NODE_ENV === "production") {
+      res.status(503).json({ error: "Database unavailable" });
+      return;
+    }
+    next();
+    return;
+  }
+
+  if (!req.user || req.user.role !== "admin") {
+    res.status(403).json({ error: "Admin access required" });
+    return;
+  }
+  next();
+}
+
+/**
+ * Optional auth: attaches user if token present, but doesn't block.
+ */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
+  if (!sqlite.isAvailable()) {
+    next();
+    return;
+  }
+
+  const token = req.cookies?.[COOKIE_NAME];
+  if (!token) {
+    next();
+    return;
+  }
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    req.user = payload;
+  } catch {
+    // Invalid token, just continue without user
+  }
+  next();
+}
