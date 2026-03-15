@@ -52,7 +52,7 @@ export function CauseChainGraph({
   }>({ x: 0, y: 0, visible: false, data: null });
 
   const buildGraph = useCallback(() => {
-    const svg = d3.select(svgRef.current);
+    const svg = d3.select(svgRef.current!);
     svg.selectAll("*").remove();
 
     const container = svgRef.current?.parentElement;

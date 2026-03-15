@@ -1,5 +1,4 @@
 import { X, ExternalLink, Newspaper, Zap, TrendingUp, AlertTriangle } from "lucide-react";
-import { Badge } from "../ui/Badge";
 import type { CauseChainNode } from "../../types";
 
 interface CauseChainDetailPanelProps {

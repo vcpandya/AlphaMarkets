@@ -228,7 +228,7 @@ function TabBar({
         </span>
       )}
 
-      {(cached || data) && (
+      {!!(cached || data) && (
         <button
           onClick={refresh}
           className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors"

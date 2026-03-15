@@ -4,7 +4,6 @@ import type {
   NewsArticle,
   NewsSource,
   EnvKeysResponse,
-  ManualSources,
 } from "../types";
 
 const API_BASE = "/api";

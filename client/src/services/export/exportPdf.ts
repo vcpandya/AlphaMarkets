@@ -10,7 +10,6 @@ export function exportAsPdf(element: HTMLElement, title: string): void {
     useCORS: true,
     logging: false,
   }).then((canvas) => {
-    const imgData = canvas.toDataURL("image/png");
     const imgWidth = canvas.width;
     const imgHeight = canvas.height;
 

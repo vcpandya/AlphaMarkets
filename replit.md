@@ -7,7 +7,7 @@ AI-powered market intelligence platform that finds hidden-gem stock insights thr
 This is a monorepo with two workspaces:
 
 - **`client/`** — React 19 + Vite 7 + TypeScript + Tailwind CSS 4 frontend
-- **`server/`** — Express 5 + TypeScript + better-sqlite3 backend
+- **`server/`** — Express 5 + TypeScript + PostgreSQL backend
 
 ### Frontend (client/)
 - React Router for navigation

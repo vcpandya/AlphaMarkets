@@ -62,7 +62,7 @@ const rarityConfig: Record<InsightRarity, { label: string; icon: typeof Eye; col
   },
 };
 
-export function StocksReport({ stocks, markets, onStockClick }: StocksReportProps) {
+export function StocksReport({ stocks, onStockClick }: StocksReportProps) {
   // Extract unique markets from the stock data
   const uniqueMarkets = Array.from(
     new Set(stocks.map((s) => s.market).filter(Boolean)),

@@ -1,4 +1,5 @@
-import { useState, useRef, KeyboardEvent } from "react";
+import { useState, useRef } from "react";
+import type { KeyboardEvent } from "react";
 import { X, RotateCcw } from "lucide-react";
 
 interface TagInputProps {

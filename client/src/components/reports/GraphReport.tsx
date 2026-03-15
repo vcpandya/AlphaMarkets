@@ -18,7 +18,6 @@ export function GraphReport({
   graph,
   causechain,
   defaultMode = "graph",
-  markets,
 }: GraphReportProps) {
   const [mode, setMode] = useState<"graph" | "causechain">(defaultMode);
   const [selectedSectors, setSelectedSectors] = useState<Set<string>>(

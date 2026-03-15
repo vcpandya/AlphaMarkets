@@ -96,10 +96,10 @@ export function ForceGraph({
     } | null;
   }>({ x: 0, y: 0, visible: false, data: null });
 
-  const [highlightedNode, setHighlightedNode] = useState<string | null>(null);
+  const [_highlightedNode, setHighlightedNode] = useState<string | null>(null);
 
   const buildGraph = useCallback(() => {
-    const svg = d3.select(svgRef.current);
+    const svg = d3.select(svgRef.current!);
     svg.selectAll("*").remove();
 
     const container = svgRef.current?.parentElement;
@@ -263,7 +263,7 @@ export function ForceGraph({
       );
 
     // Edge labels (on hover — hidden by default)
-    const edgeLabelGroup = g.append("g").attr("class", "edge-labels");
+    g.append("g").attr("class", "edge-labels");
 
     // --- NODES ---
     const nodeGroup = g.append("g");
@@ -530,8 +530,8 @@ export function ForceGraph({
             typeof e.source === "object" ? (e.source as SimNode).id : e.source;
           const tgt =
             typeof e.target === "object" ? (e.target as SimNode).id : e.target;
-          if (src === d.id) connectedIds.add(tgt);
-          if (tgt === d.id) connectedIds.add(src);
+          if (src === d.id) connectedIds.add(String(tgt));
+          if (tgt === d.id) connectedIds.add(String(src));
         });
         node.attr("opacity", (n) => (connectedIds.has(n.id) ? 1 : 0.15));
         link.attr("stroke-opacity", (e) => {
