@@ -1,6 +1,7 @@
 modules = ["nodejs-20", "web"]
 [agent]
 expertMode = true
+integrations = ["javascript_database:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
@@ -54,6 +55,6 @@ localPort = 5000
 externalPort = 5000
 
 [deployment]
-deploymentTarget = "vm"
+deploymentTarget = "autoscale"
 run = ["bash", "-c", "NODE_ENV=production node server/dist/index.js"]
 build = ["npm", "run", "build"]

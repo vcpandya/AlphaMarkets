@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import * as sqlite from "../services/sqliteStorage.js";
+import * as db from "../services/pgStorage.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || (
   process.env.NODE_ENV === "production"
@@ -16,7 +16,6 @@ export interface AuthPayload {
   role: "admin" | "user";
 }
 
-// Extend Express Request
 declare global {
   namespace Express {
     interface Request {
@@ -34,7 +33,7 @@ export function setAuthCookie(res: Response, token: string): void {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
 }
@@ -43,18 +42,9 @@ export function clearAuthCookie(res: Response): void {
   res.clearCookie(COOKIE_NAME, { path: "/" });
 }
 
-/**
- * Auth middleware: verifies JWT from cookie.
- * If SQLite is not available (browser-only mode), skips auth.
- */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  if (!sqlite.isAvailable()) {
-    if (process.env.NODE_ENV === "production") {
-      res.status(503).json({ error: "Database unavailable" });
-      return;
-    }
-    // Browser-only dev mode: skip auth
-    next();
+  if (!db.isAvailable()) {
+    res.status(503).json({ error: "Database unavailable" });
     return;
   }
 
@@ -64,10 +54,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
+  let payload: AuthPayload;
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
-    // Verify user still exists
-    const user = sqlite.getUserById(payload.userId);
+    payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
+  } catch {
+    clearAuthCookie(res);
+    res.status(401).json({ error: "Invalid or expired token", code: "AUTH_REQUIRED" });
+    return;
+  }
+
+  db.getUserById(payload.userId).then((user) => {
     if (!user) {
       clearAuthCookie(res);
       res.status(401).json({ error: "User no longer exists", code: "AUTH_REQUIRED" });
@@ -75,25 +71,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     }
     req.user = { userId: user.id, username: user.username, role: user.role as "admin" | "user" };
     next();
-  } catch {
-    clearAuthCookie(res);
-    res.status(401).json({ error: "Invalid or expired token", code: "AUTH_REQUIRED" });
-  }
+  }).catch(() => {
+    res.status(500).json({ error: "Internal server error" });
+  });
 }
 
-/**
- * Admin-only middleware. Must be used AFTER requireAuth.
- */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (!sqlite.isAvailable()) {
-    if (process.env.NODE_ENV === "production") {
-      res.status(503).json({ error: "Database unavailable" });
-      return;
-    }
-    next();
-    return;
-  }
-
   if (!req.user || req.user.role !== "admin") {
     res.status(403).json({ error: "Admin access required" });
     return;
@@ -101,26 +84,17 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
   next();
 }
 
-/**
- * Optional auth: attaches user if token present, but doesn't block.
- */
 export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
-  if (!sqlite.isAvailable()) {
-    next();
-    return;
-  }
-
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) {
     next();
     return;
   }
-
   try {
     const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
     req.user = payload;
   } catch {
-    // Invalid token, just continue without user
+    // Invalid token, continue without user
   }
   next();
 }

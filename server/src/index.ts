@@ -13,14 +13,14 @@ import authRouter from "./routes/auth.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requireAuth } from "./middleware/auth.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
-import { isAvailable as sqliteIsAvailable } from "./services/sqliteStorage.js";
+import { isAvailable as pgIsAvailable, initDb } from "./services/pgStorage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5000";
 app.use(
   cors({
     origin: CORS_ORIGIN,
@@ -48,10 +48,10 @@ app.use("/api/auth", authRouter);
 
 // Public: storage status (needed for auto-detect before login)
 app.get("/api/storage/status", (_req, res) => {
-  res.json({ available: sqliteIsAvailable(), backend: "sqlite" });
+  res.json({ available: pgIsAvailable(), backend: "postgres" });
 });
 
-// Protected routes: require auth when SQLite is available (server mode)
+// Protected routes
 app.use("/api/news", requireAuth, newsRouter);
 app.use("/api/analysis", requireAuth, analysisRouter);
 app.use("/api/models", requireAuth, modelsRouter);
@@ -71,19 +71,24 @@ if (process.env.NODE_ENV === "production") {
 // Error handler (must be last)
 app.use(errorHandler);
 
-const server = app.listen(PORT, () => {
-  console.log(`AlphaMarkets server running on http://localhost:${PORT}`);
-  startScheduler();
-});
+// Initialize DB then start server
+initDb().then(() => {
+  const server = app.listen(PORT, () => {
+    console.log(`AlphaMarkets server running on http://localhost:${PORT}`);
+    startScheduler();
+  });
 
-function shutdown() {
-  console.log("Shutting down...");
-  stopScheduler();
-  server.close(() => process.exit(0));
-  // Force exit if graceful shutdown takes too long
-  setTimeout(() => process.exit(1), 10_000);
-}
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+  function shutdown() {
+    console.log("Shutting down...");
+    stopScheduler();
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 10_000);
+  }
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+}).catch((err) => {
+  console.error("[DB] Failed to initialize database:", err);
+  process.exit(1);
+});
 
 export default app;

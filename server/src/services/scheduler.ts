@@ -1,19 +1,18 @@
 /**
  * Scheduler service - runs scheduled analyses and sends email reports.
  *
- * Polls SQLite every 60s for due schedules, executes them server-side,
+ * Polls PostgreSQL every 60s for due schedules, executes them server-side,
  * and emails the results via AgentMail.
  */
 
-import type { ScheduleConfig, NewsSource, AnalysisModules } from "../types/index.js";
-import * as sqlite from "./sqliteStorage.js";
+import type { ScheduleConfig } from "../types/index.js";
+import * as db from "./pgStorage.js";
 import { chatCompletion } from "./openRouterService.js";
 import { buildPrompt, JSON_SCHEMAS } from "./promptBuilder.js";
 import { sendEmail, formatAnalysisEmail } from "./agentMailService.js";
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
-// Keys are loaded from env vars for server-side scheduled runs
 function getServerKeys() {
   return {
     openRouter: process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || "",
@@ -36,7 +35,7 @@ export function computeNextRun(schedule: ScheduleConfig): string {
       if (next <= now) next.setDate(next.getDate() + 1);
       break;
     case "weekly": {
-      const targetDay = schedule.dayOfWeek ?? 1; // Monday default
+      const targetDay = schedule.dayOfWeek ?? 1;
       const currentDay = next.getDay();
       let daysUntil = targetDay - currentDay;
       if (daysUntil < 0 || (daysUntil === 0 && next <= now)) {
@@ -47,7 +46,7 @@ export function computeNextRun(schedule: ScheduleConfig): string {
     }
     case "monthly": {
       const targetDate = Math.min(schedule.dayOfMonth ?? 1, 28);
-      next.setDate(1); // anchor to avoid month-overflow
+      next.setDate(1);
       next.setDate(targetDate);
       if (next <= now) {
         next.setDate(1);
@@ -137,9 +136,9 @@ async function executeSchedule(schedule: ScheduleConfig): Promise<void> {
       }
     }
 
-    // Step 3: Save run to SQLite
+    // Step 3: Save run to PostgreSQL
     const runId = `sched_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    sqlite.putRun({
+    await db.putRun({
       id: runId,
       timestamp: new Date().toISOString(),
       tags: schedule.tags,
@@ -176,7 +175,7 @@ async function executeSchedule(schedule: ScheduleConfig): Promise<void> {
       lastRun: new Date().toISOString(),
       nextRun: computeNextRun(schedule),
     };
-    sqlite.putSchedule(updatedSchedule);
+    await db.putSchedule(updatedSchedule);
 
     console.log(`[Scheduler] Completed "${schedule.name}", next run: ${updatedSchedule.nextRun}`);
   } catch (err) {
@@ -188,10 +187,10 @@ const runningSchedules = new Set<string>();
 
 async function tick(): Promise<void> {
   try {
-    if (!sqlite.isAvailable()) return;
+    if (!db.isAvailable()) return;
 
     const now = new Date().toISOString();
-    const dueSchedules = sqlite.getDueSchedules(now) as ScheduleConfig[];
+    const dueSchedules = await db.getDueSchedules(now) as ScheduleConfig[];
 
     for (const schedule of dueSchedules) {
       if (runningSchedules.has(schedule.id)) continue;
@@ -206,10 +205,7 @@ async function tick(): Promise<void> {
 export function startScheduler(): void {
   if (intervalId) return;
 
-  // Check every 60 seconds
   intervalId = setInterval(tick, 60_000);
-
-  // Also run immediately on startup
   tick();
 
   console.log("[Scheduler] Started (checking every 60s)");

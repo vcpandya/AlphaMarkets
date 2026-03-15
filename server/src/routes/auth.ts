@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
-import * as sqlite from "../services/sqliteStorage.js";
+import * as db from "../services/pgStorage.js";
 import {
   signToken,
   setAuthCookie,
@@ -14,15 +14,15 @@ import {
 const router = Router();
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,                   // 10 attempts per window
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many login attempts. Try again in 15 minutes." },
 });
 
 // POST /api/auth/login
-router.post("/login", loginLimiter, (req: Request, res: Response) => {
+router.post("/login", loginLimiter, async (req: Request, res: Response) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -30,7 +30,7 @@ router.post("/login", loginLimiter, (req: Request, res: Response) => {
     return;
   }
 
-  const user = sqlite.getUserByUsername(username);
+  const user = await db.getUserByUsername(username);
   if (!user) {
     res.status(401).json({ error: "Invalid username or password" });
     return;
@@ -41,7 +41,7 @@ router.post("/login", loginLimiter, (req: Request, res: Response) => {
     return;
   }
 
-  sqlite.updateUserLastLogin(user.id);
+  await db.updateUserLastLogin(user.id);
 
   const token = signToken({
     userId: user.id,
@@ -67,21 +67,20 @@ router.post("/logout", (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// GET /api/auth/me - get current user info
-router.get("/me", requireAuth, (req: Request, res: Response) => {
+// GET /api/auth/me
+router.get("/me", requireAuth, async (req: Request, res: Response) => {
   if (!req.user) {
     res.json({ user: null });
     return;
   }
 
-  const user = sqlite.getUserById(req.user.userId);
+  const user = await db.getUserById(req.user.userId);
   if (!user) {
     res.json({ user: null });
     return;
   }
 
-  // Also return server settings relevant to the user
-  const byok = (sqlite.getServerSetting("byok") ?? "true") === "true";
+  const byok = ((await db.getServerSetting("byok")) ?? "true") === "true";
 
   res.json({
     user: {
@@ -90,14 +89,12 @@ router.get("/me", requireAuth, (req: Request, res: Response) => {
       displayName: user.display_name,
       role: user.role,
     },
-    settings: {
-      byok,
-    },
+    settings: { byok },
   });
 });
 
 // POST /api/auth/change-password
-router.post("/change-password", requireAuth, (req: Request, res: Response) => {
+router.post("/change-password", requireAuth, async (req: Request, res: Response) => {
   const { currentPassword, newPassword } = req.body;
 
   if (!currentPassword || !newPassword) {
@@ -110,7 +107,7 @@ router.post("/change-password", requireAuth, (req: Request, res: Response) => {
     return;
   }
 
-  const user = sqlite.getUserById(req.user!.userId);
+  const user = await db.getUserById(req.user!.userId);
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
@@ -122,16 +119,14 @@ router.post("/change-password", requireAuth, (req: Request, res: Response) => {
   }
 
   const hash = bcrypt.hashSync(newPassword, 10);
-  sqlite.updateUserPassword(user.id, hash);
+  await db.updateUserPassword(user.id, hash);
 
   res.json({ ok: true });
 });
 
-// ─── Admin-only user management ─────────────────────────
-
-// GET /api/auth/users - list all users (admin only)
-router.get("/users", requireAuth, requireAdmin, (_req: Request, res: Response) => {
-  const users = sqlite.getAllUsers();
+// GET /api/auth/users (admin only)
+router.get("/users", requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+  const users = await db.getAllUsers();
   res.json({
     users: users.map((u) => ({
       id: u.id,
@@ -145,8 +140,8 @@ router.get("/users", requireAuth, requireAdmin, (_req: Request, res: Response) =
   });
 });
 
-// POST /api/auth/invite - invite a new user (admin only)
-router.post("/invite", requireAuth, requireAdmin, (req: Request, res: Response) => {
+// POST /api/auth/invite (admin only)
+router.post("/invite", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   const { username, password, displayName, role } = req.body;
 
   if (!username || !password) {
@@ -159,7 +154,7 @@ router.post("/invite", requireAuth, requireAdmin, (req: Request, res: Response) 
     return;
   }
 
-  const existing = sqlite.getUserByUsername(username);
+  const existing = await db.getUserByUsername(username);
   if (existing) {
     res.status(409).json({ error: "Username already exists" });
     return;
@@ -169,7 +164,7 @@ router.post("/invite", requireAuth, requireAdmin, (req: Request, res: Response) 
   const id = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const hash = bcrypt.hashSync(password, 10);
 
-  sqlite.createUser({
+  await db.createUser({
     id,
     username,
     passwordHash: hash,
@@ -184,43 +179,38 @@ router.post("/invite", requireAuth, requireAdmin, (req: Request, res: Response) 
   });
 });
 
-// DELETE /api/auth/users/:id - delete a user (admin only)
-router.delete("/users/:id", requireAuth, requireAdmin, (req: Request, res: Response) => {
+// DELETE /api/auth/users/:id (admin only)
+router.delete("/users/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   try {
-    sqlite.deleteUser(id);
+    await db.deleteUser(id);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "Failed to delete user" });
   }
 });
 
-// ─── Admin server settings ──────────────────────────────
-
 // GET /api/auth/server-settings (admin only)
-router.get("/server-settings", requireAuth, requireAdmin, (_req: Request, res: Response) => {
-  const settings = sqlite.getAllServerSettings();
+router.get("/server-settings", requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+  const settings = await db.getAllServerSettings();
   res.json({ settings });
 });
 
 // POST /api/auth/server-settings (admin only)
-router.post("/server-settings", requireAuth, requireAdmin, (req: Request, res: Response) => {
+router.post("/server-settings", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   const { key, value } = req.body;
   if (!key) {
     res.status(400).json({ error: "key required" });
     return;
   }
-  sqlite.setServerSetting(key, String(value));
+  await db.setServerSetting(key, String(value));
   res.json({ ok: true });
 });
 
-// GET /api/auth/status - public: check if auth is required
+// GET /api/auth/status - public
 router.get("/status", (_req: Request, res: Response) => {
-  const sqliteAvailable = sqlite.isAvailable();
-  res.json({
-    authRequired: sqliteAvailable,
-  });
+  res.json({ authRequired: db.isAvailable() });
 });
 
 export default router;
