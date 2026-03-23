@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Share2, Copy, Check, X, Lock, Clock, Loader2, Eye, EyeOff, Trash2 } from "lucide-react";
 import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
 
 interface ShareModalProps {
   runId: string;
