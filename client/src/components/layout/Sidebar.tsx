@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Settings, TrendingUp, X, Trash2, Clock, Shield, LogOut } from "lucide-react";
+import { LayoutDashboard, Settings, TrendingUp, X, Trash2, History, Shield, LogOut, BarChart2, ChevronRight } from "lucide-react";
 import { useSettings } from "../../hooks/useSettings";
 import { useSavedRuns } from "../../hooks/useSavedRuns";
 import { useAuth } from "../../contexts/AuthContext";
@@ -14,14 +14,35 @@ const BASE_NAV = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-function formatDate(iso: string): string {
+function formatRelativeDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  const timeStr = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
+  if (diffDays === 0) return `Today · ${timeStr}`;
+  if (diffDays === 1) return `Yesterday · ${timeStr}`;
+  if (diffDays < 7) return `${diffDays}d ago · ${timeStr}`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + ` · ${timeStr}`;
+}
+
+const MARKET_COLORS: Record<string, string> = {
+  Global: "text-blue-400 bg-blue-400/10",
+  US: "text-emerald-400 bg-emerald-400/10",
+  EU: "text-violet-400 bg-violet-400/10",
+  Asia: "text-amber-400 bg-amber-400/10",
+  MENA: "text-orange-400 bg-orange-400/10",
+};
+
+function MarketBadge({ market }: { market: string }) {
+  const cls = MARKET_COLORS[market] || "text-text-muted bg-surface-overlay";
+  return (
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide border border-current/20 ${cls}`}>
+      {market}
+    </span>
+  );
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
@@ -38,8 +59,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const orOk = Boolean(openRouterKey);
   const avOk = Boolean(alphaVantageKey);
 
-  const displayedRuns = runs.slice(0, 5);
-  const hasMore = runs.length > 5;
+  const displayedRuns = runs.slice(0, 6);
+  const hasMore = runs.length > 6;
 
   function handleLoadRun(id: string) {
     navigate(`/?run=${id}`);
@@ -123,76 +144,112 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* Saved Runs */}
         {runs.length > 0 && (
-          <div className="px-3 flex-1 overflow-y-auto">
-            <div className="border-t border-border pt-4">
-              <div className="flex items-center gap-2 px-3 mb-2">
-                <Clock className="w-3.5 h-3.5 text-text-muted" />
+          <div className="flex-1 overflow-y-auto min-h-0 border-t border-border">
+            <div className="px-4 pt-4 pb-1 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-3.5 h-3.5 text-text-muted" />
                 <span className="text-[10px] text-text-muted uppercase tracking-widest font-semibold">
-                  Saved Runs
+                  Recent Runs
                 </span>
               </div>
+              <span className="text-[10px] font-medium text-text-muted bg-surface-overlay border border-border rounded-full px-1.5 py-0.5 leading-none">
+                {runs.length}
+              </span>
+            </div>
 
-              <div className="space-y-0.5">
-                {displayedRuns.map((run) => (
+            <div className="px-2 py-2 space-y-1.5">
+              {displayedRuns.map((run) => {
+                const primaryTags = (run.tags || []).slice(0, 2);
+                const extraTags = (run.tags || []).length - 2;
+                const markets = run.markets || [];
+
+                return (
                   <button
                     key={run.id}
                     onClick={() => handleLoadRun(run.id)}
-                    className="w-full text-left px-3 py-2 rounded-lg
-                      hover:bg-surface-overlay transition-colors group relative"
+                    className="w-full text-left px-3 py-3 rounded-xl
+                      border border-transparent
+                      hover:border-border hover:bg-surface-overlay
+                      transition-all duration-200 group relative"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-text-secondary">
-                        {formatDate(run.timestamp)}
-                      </span>
-                      <button
-                        onClick={(e) => handleDeleteRun(e, run.id)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-text-muted hover:text-bearish transition-all"
-                        title="Delete run"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-1 mt-1 flex-wrap">
-                      {(run.tags || []).slice(0, 3).map((tag, i) => (
-                        <span
-                          key={i}
-                          className="inline-block rounded-full bg-accent/10 px-1.5 py-0 text-[9px] text-accent/80 border border-accent/20"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {(run.tags || []).length > 3 && (
-                        <span className="text-[9px] text-text-muted">
-                          +{run.tags.length - 3}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {(run.markets || []).map((m) => (
-                        <span
-                          key={m}
-                          className="text-[9px] text-text-muted"
-                        >
-                          {m}
-                        </span>
-                      ))}
-                    </div>
-                  </button>
-                ))}
-              </div>
+                    {/* Tags (primary content) */}
+                    {primaryTags.length > 0 ? (
+                      <div className="flex items-center gap-1 flex-wrap mb-2 pr-6">
+                        {primaryTags.map((tag, i) => (
+                          <span
+                            key={i}
+                            className="text-xs font-medium text-text-primary leading-tight"
+                          >
+                            {i > 0 && <span className="text-text-muted mx-1">·</span>}
+                            {tag}
+                          </span>
+                        ))}
+                        {extraTags > 0 && (
+                          <span className="text-[10px] text-text-muted">+{extraTags}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs font-medium text-text-muted mb-2 pr-6 italic">
+                        Untitled run
+                      </p>
+                    )}
 
-              {hasMore && (
-                <button
-                  onClick={() => {
-                    navigate("/");
-                    onClose();
-                  }}
-                  className="w-full text-center text-[10px] text-accent hover:text-accent/80 py-2 transition-colors"
-                >
-                  View all ({runs.length})
-                </button>
-              )}
+                    {/* Metadata row */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                        {/* Markets */}
+                        {markets.slice(0, 2).map((m) => (
+                          <MarketBadge key={m} market={m} />
+                        ))}
+                        {/* Stock count */}
+                        {run.stockCount != null && run.stockCount > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] text-text-muted">
+                            <BarChart2 className="w-2.5 h-2.5" />
+                            {run.stockCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Date */}
+                    <p className="text-[10px] text-text-muted mt-1.5">
+                      {formatRelativeDate(run.timestamp)}
+                    </p>
+
+                    {/* Delete button */}
+                    <button
+                      onClick={(e) => handleDeleteRun(e, run.id)}
+                      className="absolute top-2.5 right-2.5 p-1 rounded-md
+                        opacity-0 group-hover:opacity-100
+                        text-text-muted hover:text-bearish hover:bg-bearish/10
+                        transition-all duration-150"
+                      title="Delete run"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+
+                    {/* Arrow hint */}
+                    <ChevronRight className="absolute bottom-3 right-3 w-3 h-3 text-text-muted/40
+                      opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                  </button>
+                );
+              })}
             </div>
+
+            {hasMore && (
+              <button
+                onClick={() => {
+                  navigate("/");
+                  onClose();
+                }}
+                className="w-full flex items-center justify-center gap-1.5
+                  text-[11px] text-accent hover:text-accent/80
+                  py-2 mx-auto transition-colors"
+              >
+                View all {runs.length} runs
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
           </div>
         )}
 
