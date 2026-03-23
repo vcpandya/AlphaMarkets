@@ -78,6 +78,15 @@ export async function initDb(): Promise<void> {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS shared_runs (
+      token TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      run_data JSONB NOT NULL,
+      password_hash TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Seed default admin
@@ -337,4 +346,45 @@ export async function getAllServerSettings(): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const row of result.rows) out[row.key] = row.value;
   return out;
+}
+
+// ─── Shared Runs ─────────────────────────────────────────
+
+export interface SharedRunRow {
+  token: string;
+  run_id: string;
+  run_data: unknown;
+  password_hash: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export async function createSharedRun(params: {
+  token: string;
+  runId: string;
+  runData: unknown;
+  passwordHash?: string;
+  expiresAt?: string;
+}): Promise<void> {
+  await initDb();
+  await query(
+    "INSERT INTO shared_runs (token, run_id, run_data, password_hash, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6)",
+    [params.token, params.runId, JSON.stringify(params.runData), params.passwordHash ?? null, params.expiresAt ?? null, new Date().toISOString()],
+  );
+}
+
+export async function getSharedRun(token: string): Promise<SharedRunRow | undefined> {
+  await initDb();
+  const result = await query("SELECT * FROM shared_runs WHERE token = $1", [token]);
+  return result.rows[0];
+}
+
+export async function deleteSharedRun(token: string): Promise<void> {
+  await initDb();
+  await query("DELETE FROM shared_runs WHERE token = $1", [token]);
+}
+
+export async function deleteSharedRunsByRunId(runId: string): Promise<void> {
+  await initDb();
+  await query("DELETE FROM shared_runs WHERE run_id = $1", [runId]);
 }

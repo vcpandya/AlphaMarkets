@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Save, CheckCircle } from "lucide-react";
+import { Save, CheckCircle, Share2 } from "lucide-react";
 import { useSettings } from "../../hooks/useSettings";
 import { useAnalysis } from "../../hooks/useAnalysis";
 import { useSavedRuns } from "../../hooks/useSavedRuns";
 import { AnalysisForm } from "./AnalysisForm";
 import { ProgressOverlay } from "./ProgressOverlay";
 import { ReportTabs } from "./ReportTabs";
+import { ShareModal } from "./ShareModal";
 import { Button } from "../ui/Button";
 import type { MarketRegion, ManualSources, AnalysisResults, SavedRun, AnalysisModules } from "../../types";
 import { useChatContext } from "../../contexts/ChatContext";
@@ -37,6 +38,7 @@ export function Dashboard() {
   const [lastLocation, setLastLocation] = useState("");
   const [saved, setSaved] = useState(false);
   const [loadedRun, setLoadedRun] = useState<SavedRun | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Load saved run from URL param
   const runId = searchParams.get("run");
@@ -128,7 +130,17 @@ export function Dashboard() {
         <div className="space-y-4">
           {/* Save button (only for fresh analysis, not loaded runs) */}
           {!loadedRun && (
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<Share2 className="w-4 h-4" />}
+                onClick={() => setShareOpen(true)}
+                disabled={!saved}
+                title={!saved ? "Save the analysis first to share it" : "Share this analysis"}
+              >
+                Share
+              </Button>
               <Button
                 variant={saved ? "secondary" : "primary"}
                 size="sm"
@@ -148,18 +160,28 @@ export function Dashboard() {
           )}
 
           {loadedRun && (
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-              Viewing saved run from{" "}
-              <span className="text-text-secondary">
-                {new Date(loadedRun.timestamp).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+                Viewing saved run from{" "}
+                <span className="text-text-secondary">
+                  {new Date(loadedRun.timestamp).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<Share2 className="w-4 h-4" />}
+                onClick={() => setShareOpen(true)}
+              >
+                Share
+              </Button>
             </div>
           )}
 
@@ -172,6 +194,22 @@ export function Dashboard() {
             alphaVantageKey={alphaVantageKey}
           />
         </div>
+      )}
+
+      {shareOpen && (
+        <ShareModal
+          runId={loadedRun ? loadedRun.id : "unsaved"}
+          runData={loadedRun ?? {
+            id: "unsaved",
+            timestamp: new Date().toISOString(),
+            tags: lastTags,
+            location: lastLocation,
+            markets: lastMarkets,
+            stockCount: lastStockCount,
+            results,
+          }}
+          onClose={() => setShareOpen(false)}
+        />
       )}
     </div>
   );

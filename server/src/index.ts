@@ -12,6 +12,7 @@ import contentRouter from "./routes/content.js";
 import storageRouter from "./routes/storage.js";
 import authRouter from "./routes/auth.js";
 import inboxRouter from "./routes/inbox.js";
+import shareRouter from "./routes/share.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requireAuth } from "./middleware/auth.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
@@ -53,6 +54,7 @@ app.get("/api/storage/status", (_req, res) => {
   res.json({ available: pgIsAvailable(), backend: "postgres" });
 });
 
+
 // Protected routes
 app.use("/api/news", requireAuth, newsRouter);
 app.use("/api/analysis", requireAuth, analysisRouter);
@@ -61,6 +63,7 @@ app.use("/api/env-keys", requireAuth, envkeysRouter);
 app.use("/api/content", requireAuth, contentRouter);
 app.use("/api/storage", requireAuth, storageRouter);
 app.use("/api/inbox", requireAuth, inboxRouter);
+app.use("/api/share", shareRouter);
 
 // Serve frontend
 if (process.env.NODE_ENV === "production") {

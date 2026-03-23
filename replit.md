@@ -21,7 +21,8 @@ This is a monorepo with two workspaces:
 - PostgreSQL database via `pg` (Replit-managed, `DATABASE_URL` env var)
 - JWT auth with bcryptjs (cookie-based)
 - Background scheduler for periodic news fetching
-- Routes: `/api/auth`, `/api/news`, `/api/analysis`, `/api/models`, `/api/env-keys`, `/api/content`, `/api/storage`
+- Routes: `/api/auth`, `/api/news`, `/api/analysis`, `/api/models`, `/api/env-keys`, `/api/content`, `/api/storage`, `/api/share`
+- Share links: `/api/share` (POST create, GET read public, POST verify password, DELETE revoke). Stored in `shared_runs` table with optional bcrypt password and expiry timestamp.
 - External integrations: OpenRouter (LLMs), Jina (web scraping), AlphaVantage (stock data), AgentMail (via Replit connector, fixed mailbox omni@agentmail.to)
 
 ## Dev Workflows

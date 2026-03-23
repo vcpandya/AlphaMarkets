@@ -4,6 +4,7 @@ import { Dashboard } from "./components/dashboard/Dashboard";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { AdminPage } from "./components/admin/AdminPage";
 import { LoginPage } from "./components/auth/LoginPage";
+import { SharedRunPage } from "./components/shared/SharedRunPage";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Spinner } from "./components/ui/Spinner";
 
@@ -37,10 +38,15 @@ function AppContent() {
   );
 }
 
-export default function App() {
+function AppRoutes() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <Routes>
+      <Route path="/share/:token" element={<SharedRunPage />} />
+      <Route path="/*" element={<AuthProvider><AppContent /></AuthProvider>} />
+    </Routes>
   );
+}
+
+export default function App() {
+  return <AppRoutes />;
 }
